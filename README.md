@@ -3,7 +3,10 @@ The shiny app implementing package ClusterLong to visualize the process and resu
 
 
 ## Usage
-Directly run in R: shiny::runGitHub("ClusterLong_ShinyApp", "junyzhou10", ref = "main")
+Website exhibit:
+https://junyzhou.shinyapps.io/ClusterLong_ShinyApp/
+
+Run in R: shiny::runGitHub("ClusterLong_ShinyApp", "junyzhou10", ref = "main")
 
 Certain R-packages are required: shiny, dplyr, DT, shinydashboard, doMC, plotrix, ClusterLong. So make sure the packages have already been installed beforehand.
 
