@@ -5,30 +5,53 @@ require(shinydashboard)
 require(plotrix)
 require(ClusterLong)
 require(doMC)
+require(stats)
+require(shinyhelper)
+require(plotly)
 
 sidebar <- dashboardSidebar(
   sidebarMenu(
     # read input
-    fileInput("Datfile", "Choose a valid data file (csv, rds, Rdata)",
-              accept = c(
-                ".rds",
-                ".Rdata",
-                "text/csv",
-                "text/comma-separated-values,text/plain",
-                ".csv")
+    conditionalPanel(
+      '!input.loadExample',
+      fileInput("Datfile", "Choose a valid data file (csv, rds, Rdata)",
+                accept = c(
+                  ".rds",
+                  ".Rdata",
+                  "text/csv",
+                  "plain",
+                  ".csv")
+      ),
+      helpText("Please input data in LONG FORMAT")
     ),
-    tags$p("Note: please input data in LONG FORMAT"),
+    
+    checkboxInput("loadExample", label = "or, Load Toy Example"),
+    
+    conditionalPanel(
+      "input.loadExample",
+      helper(
+        selectizeInput("toyExamples",label = NULL, choices = list.files(pattern = "*.Rdata"), options = list(
+          placeholder = 'Please click and select',
+          onInitialize = I('function() { this.setValue(""); }')
+        )),
+        colour = "lightblue", type = "inline", content = "<p>In both toy examples:</p>
+      <p>id: subject id (id)</p>
+      <p>obs: observational times (x)</p>
+      <p>y_1,...,y_5: five outcomes (Y)</p>
+      <p>label: correct labels (not required for clustering purpose)</p>"
+      )
+    ),
     tags$hr(),
     
     # tab: visualization
     menuItem("Data Visualization", tabName = "visualization", icon = icon("th")),
     
     # tab: Clustering analysis
-    menuItem("Clustering Analysis", icon = icon("flag-checkered"), tabName = "ClusterLong",
-             badgeLabel = "GO", badgeColor = "green"),
+    menuItem("Clustering Analysis", icon = icon("flag-checkered"), tabName = "ClusterLong" #badgeLabel = "GO", badgeColor = "green"
+    ),
     
     # tab: Clustering analysis
-    menuItem("Diagnosis", icon = icon("chart-bar"), tabName = "Diagnosis")
+    menuItem("Summary of Clusters", icon = icon("chart-bar"), tabName = "Diagnosis")
     
     
   ),
@@ -90,14 +113,16 @@ body <- dashboardBody(
                   
                   conditionalPanel(
                     "input.inputID != '' & !input.SubjSpec", 
-                    sliderInput(inputId = "NoObs", 
-                                label = "Select the Number of Samples to Display", 
-                                min   = 1, 
-                                max   = 100, 
-                                step  = 1,
-                                round = T,
-                                value = 1),
-                    tags$em("Samples are selected in random fashion")
+                    helper(
+                      sliderInput(inputId = "NoObs", 
+                                  label = "Select the Number of Samples to Display", 
+                                  min   = 1, 
+                                  max   = 100, 
+                                  step  = 1,
+                                  round = T,
+                                  value = 1),
+                      colour = "lightblue", type = "inline", content = "Samples are selected in random fashion"
+                    )
                   ),
                   
                   tags$br(),
@@ -108,26 +133,17 @@ body <- dashboardBody(
                   
                   conditionalPanel(
                     "input.SubjSpec",
-                    selectizeInput("selectID", "Select Subject ID", choices = c("Select id(s) from list" = ""), multiple = T), 
-                    tags$em("No more than 10 subjects at the same time")
+                    selectizeInput("selectID", "Select Subject ID", choices = c("Select id(s) from list" = ""), multiple = T,
+                                   options = list(maxOptions = 100, maxItems = 10)), 
+                    helpText("No more than 10 subjects at the same time")
                   )
               ),
               box(title = "Sample Spaghetti Plot", 
                   status = "primary",
                   solidHeader = T,
                   width = 8, collapsible = T, collapsed = F,
-                  # plotlyOutput("Spaghetti")
-                  plotOutput("Spaghetti"),
-                  # download button
-                  conditionalPanel(
-                    "input.selectY",
-                    div(
-                      style = "position: absolute; right: 0.5em; bottom: 0.5em;",
-                      downloadButton(outputId = "down_sample_plot", label = ""),
-                      size = "xs",
-                      icon = icon("download", class = "opt")
-                    )
-                  )
+                  plotlyOutput("Spaghetti"),
+                  # plotOutput("Spaghetti"),
               )
             )
     ),
@@ -154,7 +170,12 @@ body <- dashboardBody(
                     tags$hr(),
                     checkboxInput("preprocess", "Data preprocessing? (recommend)", value = TRUE),
                     tags$hr(),
-                    checkboxInput("parallel", "Parallel computing? (highly recommend)", value = FALSE)
+                    helper(
+                      checkboxInput("parallel", "Parallel computing?", value = FALSE),
+                      colour = "lightblue", type = "inline", content = "<p>Parallel computing is highly recommended for datasets with large number of subjects (> 500).
+                      Please notice the difference between the number of subjects and the number of observations. </p>
+                      <p>This App will split data into subsets with size roughly as the specificed 'batch size', and implement ClusterLong algorithm in a parallel manner.</p>"
+                    )
                   ),
                   conditionalPanel(
                     "input.parallel",
@@ -203,44 +224,73 @@ body <- dashboardBody(
                   textOutput("resTxt3"),
                   uiOutput("FinalNoCl")
               ),
-              box(title = "Clustering Results/Patterns", 
+              column(width = 8, 
+                     box(title = "Clustering Results", 
+                         status = "primary",
+                         solidHeader = T,
+                         width = 12, collapsible = T,
+                         div(style = 'overflow-x: scroll',verbatimTextOutput("resIDs")),
+                         uiOutput("downResTraj")
+                     ),
+                     box(title = "Mean Patterns", 
+                         status = "primary",
+                         solidHeader = T,
+                         width = 12, collapsible = T,
+                         plotlyOutput("MeanTraj")
+                     )
+              )
+            ),
+            fluidRow(
+              box(title = "Baseline/Subject Covariates",
+                  status = "warning",
+                  solidHeader = T,
+                  width = 4,
+                  collapsible = T,
+                  uiOutput("FeatureSel")
+              ),
+              box(title = "Baseline/Subject Level Patterns",
                   status = "primary",
                   solidHeader = T,
-                  width = 8, collapsible = T,
-                  div(style = 'overflow-x: scroll',verbatimTextOutput("resIDs")),
-                  plotOutput("MeanTraj"),
-                  uiOutput("downResTraj")
+                  width = 8,
+                  collapsible = T,
+                  plotOutput("FeaturePlot")
               )
-              
             )
-            
     )
   )
 )
 
 # Put them together into a dashboardPage
 ui <- dashboardPage(
-  dashboardHeader(title = "ClusterLong App"),
+  dashboardHeader(title = span("ClusterLong App",
+                               style = "color: white; font-size: 22px")),
   sidebar,
   body
 )
 
 
-
+###### SERVER ######
 server <- function(input, output, session) {
+  observe_helpers()
+  options(shiny.maxRequestSize=30*1024^2) # maximum inputfile size is set to 30M
   ###### Read input data file ######
   rawDat <- reactive({
-    inFile <- input$Datfile
-    if (is.null(inFile)) {
-      return(NULL)
-    }
-    
-    if (inFile$type == "text/csv") {
-      rawDat = read.csv(inFile$datapath, header = T)
+    inFile<-input$Datfile
+    if (input$loadExample) {
+      inFile = NULL
+      if (input$toyExamples != "") {
+        return(readRDS(input$toyExamples))
+      }
     } else {
-      rawDat = readRDS(inFile$datapath)
+      if (!is.null(inFile)) {
+        if (inFile$type == "text/csv") {
+          return(read.csv(inFile$datapath, header = T))
+        } else {
+          return(readRDS(inFile$datapath))
+        }
+      }
     }
-    return(rawDat)
+    return(NULL)
   })
   
   # use to check if data is uploaded
@@ -261,6 +311,31 @@ server <- function(input, output, session) {
     updateSelectInput(session, "inputX", choices = var_names, selected = "")
     updateSelectInput(session, "inputY", choices = var_names, selected = "")
     updateSelectInput(session, 'inputID', choices = var_names, selected = "")
+    updateRadioButtons(session, "splineFunc", selected = "Cubic B-splines")
+    updateNumericInput(session, "df", value = 7)
+    updateRadioButtons(session, "weightFunc", selected = "Standard")
+    updateCheckboxInput(session, "preprocess", value = TRUE) 
+    updateCheckboxInput(session, "parallel", value = FALSE) 
+    updateSliderInput(session, "dropout", value = 20)
+    updateNumericInput(session, "grpSize", value = 200)
+    updateNumericInput(session, "Num.Cores", value = 7)
+    updateSelectInput(session, "NumCl", selected = "")
+    updateCheckboxInput(session, "SubjSpec", value = FALSE)
+    output$dendrogram <- NULL
+    output$NoClusterImages <- NULL
+    output$MaxNoCl <- NULL
+    output$resTxt  <- NULL
+    output$resTxt1 <- NULL
+    output$resTxt2 <- NULL
+    output$resTxt3 <- NULL
+    output$FinalNoCl<-NULL
+    output$UserSpec<- NULL
+    output$resIDs  <- NULL
+    output$MeanTraj<- NULL
+    output$FeatureSel  <- NULL
+    output$downDendro  <- NULL
+    output$downResTraj <- NULL
+    output$FeaturePlot <- NULL
   })
   
   
@@ -268,36 +343,53 @@ server <- function(input, output, session) {
     if (!input$inputID==""){
       id.seq = unique(rawDat()[,input$inputID])
       updateSliderInput(session, inputId = "NoObs", max = min(100, length(id.seq)))
-      updateSelectizeInput(session, inputId = "selectID", choices = id.seq, 
-                           selected = "", options= list(maxItems = 10, maxOptions = length(id.seq)))
+      updateSelectizeInput(session, inputId = "selectID", choices = id.seq, selected = "", 
+                           options = list(maxItems = 10, maxOptions = length(id.seq)))
     }
     
   })
   observeEvent(input$inputY, {
-    updateRadioButtons(session, inputId = "selectY", choices = input$inputY, selected = "", inline = T)
+    updateRadioButtons(session, inputId = "selectY", choices = input$inputY, selected = input$inputY[1], inline = T)
   })
   
   
   ###### figure in manuItem 1 (Data Visualization) ######
-  output$Spaghetti <- renderPlot({
+  output$Spaghetti <- renderPlotly({
     if (is.null(rawDat()) | input$selectY == "" | input$inputX == "" | input$inputID == "") {
       return(NULL)
     } else {
+      dat = rawDat()[complete.cases(rawDat()[, c(input$inputX, input$selectY, input$inputID)]),]
       if (input$SubjSpec) { # plot specific subjects using inputs from selectID
-        plot( 1, type = "n", xlab = input$inputX, ylab = input$selectY, xlim = range(rawDat()[,input$inputX]), ylim = range(rawDat()[,input$selectY]) )
-        id.sel = as.numeric(input$selectID)
-        for (ids in id.sel){
-          pos_ind = rawDat()[, input$inputID] == ids
-          lines(rawDat()[pos_ind,input$inputX], rawDat()[pos_ind,input$selectY], type = "b", col = "gray30")
+        if (!is.null(input$selectID)){
+          id.sel = input$selectID
+          subset = dat[dat[,input$inputID] %in% id.sel,]
+          subset <- highlight_key(subset, key=~get(input$inputID))
+          p <- ggplot(subset, aes_string(input$inputX, input$selectY, group = input$inputID)) + geom_line(linetype = "dotted", color = "gray50") + geom_point(size = 1, color = "gray50")
+          gg <- highlight(ggplotly(p, tooltip = c(input$inputID)), "plotly_click", 'plotly_doubleclick')
+          return(gg)
         }
         
-      } else { # if not, random chose number of subjects according to NoObs
-        plot( 1, type = "n", xlab = input$inputX, ylab = input$selectY, xlim = range(rawDat()[,input$inputX]), ylim = range(rawDat()[,input$selectY]) )
-        id.sel = sample(unique(rawDat()[,input$inputID]), input$NoObs)
-        for (ids in id.sel){
-          pos_ind = rawDat()[, input$inputID] == ids
-          lines(rawDat()[pos_ind,input$inputX], rawDat()[pos_ind,input$selectY], type = "b", col = "gray50")
-        }
+        # plot( 1, type = "n", xlab = input$inputX, ylab = input$selectY, xlim = range(dat[,input$inputX]), ylim = range(dat[,input$selectY]) )
+        # id.sel = input$selectID
+        # for (ids in id.sel){
+        #   pos_ind = as.character(dat[, input$inputID]) == ids
+        #   lines(dat[pos_ind,input$inputX], dat[pos_ind,input$selectY], type = "b", col = "gray30")
+        # }
+      } else { # if not, randomly select number of subjects according to NoObs
+        id.sel = sample(unique(dat[,input$inputID]), input$NoObs)
+        subset = dat[dat[,input$inputID] %in% id.sel,]
+        subset <- highlight_key(subset, key=~get(input$inputID))
+        p <- ggplot(subset, aes_string(input$inputX, input$selectY, group = input$inputID)) + geom_line(linetype = "dotted", color = "gray50") + geom_point(size = 1, color = "gray50")
+        gg <- highlight(ggplotly(p, tooltip = c(input$inputID)), "plotly_hover", 'plotly_doubleclick')
+        return(gg)
+        
+        ## regular plot
+        # plot( 1, type = "n", xlab = input$inputX, ylab = input$selectY, xlim = range(dat[,input$inputX]), ylim = range(dat[,input$selectY]) )
+        # id.sel = sample(unique(dat[,input$inputID]), input$NoObs)
+        # for (ids in id.sel){
+        #   pos_ind = dat[, input$inputID] == ids
+        #   lines(dat[pos_ind,input$inputX], dat[pos_ind,input$selectY], type = "b", col = "gray50")
+        # }
       }
     }
   })
@@ -312,6 +404,8 @@ server <- function(input, output, session) {
     updateSliderInput(session, "dropout", value = 20)
     updateNumericInput(session, "grpSize", value = 200)
     updateNumericInput(session, "Num.Cores", value = 7)
+    updateSelectInput(session, "NumCl", selected = "")
+    updateCheckboxInput(session, "SubjSpec", value = FALSE)
     output$dendrogram <- NULL
     output$NoClusterImages <- NULL
     output$MaxNoCl <- NULL
@@ -323,7 +417,10 @@ server <- function(input, output, session) {
     output$UserSpec<- NULL
     output$resIDs  <- NULL
     output$MeanTraj<- NULL
-    output$downResTraj<- NULL
+    output$FeatureSel  <- NULL
+    output$downDendro  <- NULL
+    output$downResTraj <- NULL
+    output$FeaturePlot <- NULL
   })
   
   ##### manuItem 2 (Analysis): Run button #####
@@ -438,105 +535,95 @@ server <- function(input, output, session) {
     
     ####### Diagnosis tab #######
     output$FinalNoCl <- renderUI(
-      tagList(
-        selectInput(inputId = "NumCl", 
-                    label = "How many clusters?", 
-                    choices = seq(1,length(res()$Gap_b)),
-                    selected = 1),
-        
-        conditionalPanel(
-          condition = "input.NumCl != 1 ",
-          sliderInput(
-            inputId = "NumSamples",
-            label   = "Display how many samples in each cluster?",
-            min     = 0,
-            max     = min(100, length(res()$Gap_b)),
-            value   = 0,
-            step    = 1,
-            round   = TRUE
-          ),
-          
-          div(
-            style = "float: right",
-            downloadButton(outputId = "down_meantraj_plot", label = "Download Figure"),
-            size = "xs",
-            icon = icon("download", class = "opt")
-          )
-        ),
-        
-        conditionalPanel(
-          condition = "input.NumSamples != 0 ",
-          checkboxInput("fixSeed", "Fix seed", value = TRUE)
-        )
+      selectizeInput(inputId = "NumCl", 
+                     label = "How many clusters?", 
+                     choices = seq(2,length(res()$Gap_b)),
+                     selected = input$UserNoCl,
+                     options = list(
+                       placeholder = 'Please click and select'
+                     )
       )
     )
     
+    ## cluster feature selection
+    output$FeatureSel <- renderUI(
+      helper(
+        selectizeInput("selectFeature", "Select a variable to show", 
+                       choices = colnames(rawDat())[!colnames(rawDat()) %in% c(input$inputX, input$inputID)],
+                       options = list(
+                         placeholder = 'Please click and select',
+                         onInitialize = I('function() { this.setValue(""); }')
+                       )
+        ),
+        colour = "lightblue", type = "inline", content = "<p>Compare baseline patterns of the selected variable in the original dataset among detected clusters.</p>
+            <p>Factor-type covariates will be shown in percent stacked barcharts; Continuous-type covariates will be shown in boxplots.</p>
+            <p>Note: though described for baseline comparisons, subject level covariates are supported natually.</p>"
+      )
+    )
+    
+    # yield mean pattern plots
     observeEvent(input$NumCl,{
+      
       no.cl = as.numeric(input$NumCl)
       
-      if (no.cl > 1){
-        output$resIDs <- renderText({
-          sapply(seq(no.cl),
-                 function(ii) {
-                   if (ii == 1) {
-                     paste(" Cluster",ii, "ID :",paste(res()$Cluster.Lists[[no.cl]][[ii]], collapse = ",") )
-                   } else {
-                     paste("\n Cluster",ii, "ID :",paste(res()$Cluster.Lists[[no.cl]][[ii]], collapse = ",") ) 
-                   }
-                 })
-        })
-        
-        output$MeanTraj <- renderPlot({
-          alpha = ifelse(input$NumSamples>100, 0.05, 0.8-0.0075*input$NumSamples)
-          if (input$fixSeed) {
-            MeanPlot(res(), No.Cluster = no.cl, add.sample = input$NumSamples, trsp = alpha )
-          } else {
-            MeanPlot(res(), No.Cluster = no.cl, add.sample = input$NumSamples, seed = runif(1)*10000 , trsp = alpha)
-          }
-        })
-        
-        output$downResTraj <- renderUI(
-          div(
-            style = "position: absolute; right: 0.1em; bottom: -2.5em;",
-            downloadButton(outputId = "down_res", label = "Save Clustering Results"),
-            size = "xs",
-            icon = icon("download", class = "opt")
-          )
+      output$resIDs <- renderText({
+        sapply(seq(no.cl),
+               function(ii) {
+                 if (ii == 1) {
+                   paste0("Cluster ",ii, " (n=", length(res()$Cluster.Lists[[no.cl]][[ii]]),") " , "ID: ",paste(res()$Cluster.Lists[[no.cl]][[ii]], collapse = ",") )
+                 } else {
+                   paste0("\nCluster ",ii, " (n=", length(res()$Cluster.Lists[[no.cl]][[ii]]),") " , "ID: ",paste(res()$Cluster.Lists[[no.cl]][[ii]], collapse = ",") )
+                 }
+               })
+      })
+      
+      output$MeanTraj <- renderPlotly({
+        MeanPlot(res(), No.Cluster = no.cl)
+      })
+      
+      output$downResTraj <- renderUI(
+        div(
+          # style = "position: absolute; right: 0.1em; bottom: -2.5em;",
+          style = "float:right",
+          downloadButton(outputId = "down_res", label = "Save Clustering Results"),
+          size = "xs",
+          icon = icon("download", class = "opt")
         )
-      }
+      )
+      
     })
+    
+    output$FeaturePlot <- renderPlot(
+      if (!is.null(input$selectFeature) & input$selectFeature!='' & !is.null(input$NumCl)) {
+        sel.dat = rawDat()[,c(input$inputID, input$inputX, input$selectFeature)]; sel.dat = sel.dat[complete.cases(sel.dat), ]
+        sel.dat = sel.dat %>% group_by(get(input$inputID)) %>% arrange(get(input$inputX)) %>% filter(row_number()==1) %>% ungroup()
+        sel.dat = as.data.frame(sel.dat)
+        sel.x = sel.dat[, input$selectFeature]
+        grp = NULL
+        for (id in sel.dat[,1]) {grp = c(grp, which(sapply(res()$Cluster.Lists[[as.numeric(input$NumCl)]], function(x) id %in% x)==TRUE))}
+        sel.dat$grp = as.factor(paste("Cluster", grp))
+        
+        
+        if (class(sel.x) == "factor" | length(unique(sel.x)) <= 10) {
+          tab = table(sel.x, sel.dat[,"grp"])
+          p_val = ifelse(min(tab)<=5, fisher.test(tab)$p.value, chisq.test(tab)$p.value)
+          barplot(t(t(tab)/colSums(tab)),  border="white", xlab="", ylab = "Percent", main = paste0(input$selectFeature," (p-val: ", round(p_val,3), ")") , legend = TRUE, 
+                  args.legend = list(bty = "n", x = "right", ncol = 1), xlim = c(0,ncol(tab)*1.5) )
+        } else { # treat as continuous, yield boxplot
+          p_val = summary(aov(sel.x~sel.dat$grp))[[1]][1,"Pr(>F)"]
+          ggplot(sel.dat, aes_string(x="grp", y=input$selectFeature)) + geom_boxplot() + theme_bw() + labs(x = "")+
+            annotate("text",  x=Inf, y = Inf, label = paste("p-val:", round(p_val,3)), vjust=1, hjust=1)
+        }
+        
+      }
+    )
     
   })
   
   
-  ####### downloads #######
-  ## Fig 1:
-  output$down_sample_plot <- downloadHandler(
-    filename = function(){
-      paste("SpaghettiPlot", Sys.Date(), "png", sep = ".")
-    },
-    content = function(file){
-      png(file)
-      if (input$SubjSpec) { # plot specific subjects using inputs from selectID
-        plot( 1, type = "n", xlab = input$inputX, ylab = input$selectY, xlim = range(rawDat()[,input$inputX]), ylim = range(rawDat()[,input$selectY]) )
-        id.sel = as.numeric(input$selectID)
-        for (ids in id.sel){
-          pos_ind = rawDat()[, input$inputID] == ids
-          lines(rawDat()[pos_ind,input$inputX], rawDat()[pos_ind,input$selectY], type = "b", col = "gray30")
-        }
-        
-      } else { # if not, random chose number of subjects according to NoObs
-        plot( 1, type = "n", xlab = input$inputX, ylab = input$selectY, xlim = range(rawDat()[,input$inputX]), ylim = range(rawDat()[,input$selectY]) )
-        id.sel = sample(unique(rawDat()[,input$inputID]), input$NoObs)
-        for (ids in id.sel){
-          pos_ind = rawDat()[, input$inputID] == ids
-          lines(rawDat()[pos_ind,input$inputX], rawDat()[pos_ind,input$selectY], type = "b", col = "gray50")
-        }
-      }
-      dev.off()
-    }
-  )
   
+  
+  ####### downloads #######
   ## Fig 2: dendrogram & indices
   output$down_dendro_plot <- downloadHandler(
     filename = function(){
@@ -572,36 +659,6 @@ server <- function(input, output, session) {
     }
   )
   
-  ## Fig 3: 
-  output$down_meantraj_plot <- downloadHandler(
-    filename = function(){
-      paste("MeanTraj", Sys.Date(), "png", sep = ".")
-    },
-    content = function(file){
-      no.Y = length(input$inputY)
-      mod3 = no.Y %% 3
-      mod4 = no.Y %% 4
-      if (mod3==0) {
-        ncolumn = 3
-      } else if (mod4==0) {
-        ncolumn = 4
-      } else {
-        ncolumn = ifelse(mod3<=mod4, 4, 3)
-      }
-      
-      png(file,
-          width = ncolumn*180,
-          height = ceiling(no.Y/ncolumn)*240)
-      no.cl = as.numeric(input$NumCl)
-      alpha = ifelse(input$NumSamples>100, 0.05, 0.8-0.0075*input$NumSamples)
-      if (input$fixSeed) {
-        MeanPlot(res(), No.Cluster = no.cl, add.sample = input$NumSamples, trsp = alpha )
-      } else {
-        MeanPlot(res(), No.Cluster = no.cl, add.sample = input$NumSamples, seed = runif(1)*10000 , trsp = alpha)
-      }
-      dev.off()
-    }
-  )
   
   ## Res file: 
   output$down_res <- downloadHandler(
