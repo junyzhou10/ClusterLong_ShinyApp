@@ -12,25 +12,11 @@ require(plotly)
 sidebar <- dashboardSidebar(
   sidebarMenu(
     # read input
-    conditionalPanel(
-      '!input.loadExample',
-      fileInput("Datfile", "Choose a valid data file (csv, rds, Rdata)",
-                accept = c(
-                  ".rds",
-                  ".Rdata",
-                  "text/csv",
-                  "plain",
-                  ".csv")
-      ),
-      helpText("Please input data in LONG FORMAT")
-    ),
-    
-    checkboxInput("loadExample", label = "or, Load Toy Example"),
     
     conditionalPanel(
-      "input.loadExample",
+      "!input.loadExample",
       helper(
-        selectizeInput("toyExamples",label = NULL, choices = list.files(pattern = "*.Rdata"), options = list(
+        selectizeInput("toyExamples",label = "Choose a data file", choices = list.files(pattern = "*.Rdata"), options = list(
           placeholder = 'Please click and select',
           onInitialize = I('function() { this.setValue(""); }')
         )),
@@ -39,6 +25,24 @@ sidebar <- dashboardSidebar(
       <p>obs: observational times (x)</p>
       <p>y_1,...,y_5: five outcomes (Y)</p>
       <p>label: correct labels (not required for clustering purpose)</p>"
+      )
+    ),
+    
+    checkboxInput("loadExample", label = "or, Input your own data"),
+    
+    # user input 
+    conditionalPanel(
+      'input.loadExample',
+      helper(
+        fileInput("Datfile", "Choose a valid data file (csv, rds, Rdata)",
+                  accept = c(
+                    ".rds",
+                    ".Rdata",
+                    "text/csv",
+                    "plain",
+                    ".csv")
+        ),
+        colour = "lightblue", type = "inline", content = "<p>Please input data in LONG FORMAT</p>"
       )
     ),
     tags$hr(),
@@ -78,7 +82,7 @@ body <- dashboardBody(
   ###### UI for manuItem 1 (Data Visualization) ######
   tabItems(
     tabItem(tabName = "visualization",
-            h2("Visualize Longitudinal Data"),
+            h2("Visualization of Longitudinal Data"),
             fluidRow(
               box(title = "Variable Specification",
                   status = "warning",
@@ -86,9 +90,9 @@ body <- dashboardBody(
                   width = 4,
                   collapsible = T,
                   conditionalPanel("output.fileUploaded", 
-                                   selectInput('inputX', 'Which variable is the observational time (x)?', choices = c("Select a variable" = "")),  
-                                   selectInput("inputY", "Which variable(s) is(are) the outcome(s) (Y)?", choices = c("Select variable(s)" = ""), multiple = T),
-                                   selectInput('inputID', 'Which variable indicating subject ID (id)?', choices = c("Select a variable" = ""))
+                                   selectInput('inputX', 'Specify the variable for observation time (x)', choices = c("Select a variable" = "")),  
+                                   selectInput('inputID', 'Select the variable for subject identification (id)', choices = c("Select a variable" = "")),
+                                   selectInput("inputY", "Specify the variable(s) for longitudinal response (Y)", choices = c("Select variable(s)" = ""), multiple = T)
                   )
               ),
               box(title = "Table of Input Data", 
@@ -115,7 +119,7 @@ body <- dashboardBody(
                     "input.inputID != '' & !input.SubjSpec", 
                     helper(
                       sliderInput(inputId = "NoObs", 
-                                  label = "Select the Number of Samples to Display", 
+                                  label = "Select sample size", 
                                   min   = 1, 
                                   max   = 100, 
                                   step  = 1,
@@ -161,14 +165,27 @@ body <- dashboardBody(
                   collapsible = T,
                   conditionalPanel(
                     "input.inputID != '' & input.inputX != '' & input.inputY != ''", 
-                    radioButtons("splineFunc", "Choose Spline Basis", choices = c("Cubic B-splines", "Natural Cubic Splines"), selected = "Cubic B-splines"),
+                    radioButtons("splineFunc", "Choose Degree of B-Spline Basis", choices = c("Cubic B-splines", "Quadratic B-splines", "Other"), selected = "Cubic B-splines"),
+                    conditionalPanel(
+                      'input.splineFunc =="Other"',
+                      helper(
+                        numericInput("degree", "Degree other than 2 or 3:", value = 4, min = 4, step = 1),
+                        colour = "lightblue", type = "inline", content = "Degree of the piecewise polynomial, e.g. 3 for cubic splines"
+                      )
+                    ),
                     tags$hr(),
-                    numericInput("df", "Degrees of freedom (basis functions)", value = 7, min = 4, step = 1),
+                    helper(
+                      numericInput("df", "Number of interval knots", value = 3, min = 0, step = 1),
+                      colour = "lightblue", type = "inline", content = "The total number of spline basis functions = Number of interval knots + Degree of spline basis + 1"
+                    ),
+                    
                     tags$hr(),
-                    radioButtons("weightFunc", "How to aggregate multiple outcomes?", choices = c("Standard", "Softmax"), selected = "Standard"),
-                    tags$em("Softmax only for the case with large amount of noise outcomes"),
-                    tags$hr(),
-                    checkboxInput("preprocess", "Data preprocessing? (recommend)", value = TRUE),
+                    helper(
+                      radioButtons("weightFunc", "Weighting method:", choices = c("Standard", "Softmax"), selected = "Standard"),
+                      colour = "lightblue", type = "inline", content = "<p>For the cases with multiple response outcomes.</p>
+                      <p>Standard method simply takes the average of weights coefficients.</p>
+                      <p>Softmax adopts the softmax transformation of weights coefficients, which is suggested for the cases with large amount of noise outcomes</p>"
+                    ),
                     tags$hr(),
                     helper(
                       checkboxInput("parallel", "Parallel computing?", value = FALSE),
@@ -191,7 +208,7 @@ body <- dashboardBody(
                     actionButton("reset", "RESET", icon = icon("redo"), style = "display:inline-block !important;")
                   )
               ),
-              box(title = "Hierarchical Analysis Results", 
+              box(title = "Results of Hierarchical Clustering", 
                   status = "primary",
                   solidHeader = T,
                   width = 8, collapsible = T,
@@ -212,7 +229,7 @@ body <- dashboardBody(
     
     ###### UI for manuItem 3 (Diagnose tab) ######
     tabItem(tabName = "Diagnosis",
-            h2("Visualize Clustering Results"),
+            h2("Visualization of Clustering Results"),
             tags$hr(),
             fluidRow(
               box(title = "Number of Clusters",
@@ -225,14 +242,14 @@ body <- dashboardBody(
                   uiOutput("FinalNoCl")
               ),
               column(width = 8, 
-                     box(title = "Clustering Results", 
+                     box(title = "Cluster Members", 
                          status = "primary",
                          solidHeader = T,
                          width = 12, collapsible = T,
                          div(style = 'overflow-x: scroll',verbatimTextOutput("resIDs")),
                          uiOutput("downResTraj")
                      ),
-                     box(title = "Mean Patterns", 
+                     box(title = "Cluster Mean Trajectories", 
                          status = "primary",
                          solidHeader = T,
                          width = 12, collapsible = T,
@@ -241,14 +258,14 @@ body <- dashboardBody(
               )
             ),
             fluidRow(
-              box(title = "Baseline/Subject Covariates",
+              box(title = "Cluster Characteristics",
                   status = "warning",
                   solidHeader = T,
                   width = 4,
                   collapsible = T,
                   uiOutput("FeatureSel")
               ),
-              box(title = "Baseline/Subject Level Patterns",
+              box(title = "Cluster Specific Distributions",
                   status = "primary",
                   solidHeader = T,
                   width = 8,
@@ -272,11 +289,11 @@ ui <- dashboardPage(
 ###### SERVER ######
 server <- function(input, output, session) {
   observe_helpers()
-  options(shiny.maxRequestSize=30*1024^2) # maximum inputfile size is set to 30M
+  options(shiny.maxRequestSize=100*1024^2) # maximum inputfile size is set to 100M
   ###### Read input data file ######
   rawDat <- reactive({
     inFile<-input$Datfile
-    if (input$loadExample) {
+    if (!input$loadExample) {
       inFile = NULL
       if (input$toyExamples != "") {
         return(readRDS(input$toyExamples))
@@ -312,9 +329,8 @@ server <- function(input, output, session) {
     updateSelectInput(session, "inputY", choices = var_names, selected = "")
     updateSelectInput(session, 'inputID', choices = var_names, selected = "")
     updateRadioButtons(session, "splineFunc", selected = "Cubic B-splines")
-    updateNumericInput(session, "df", value = 7)
+    updateNumericInput(session, "df", value = 3)
     updateRadioButtons(session, "weightFunc", selected = "Standard")
-    updateCheckboxInput(session, "preprocess", value = TRUE) 
     updateCheckboxInput(session, "parallel", value = FALSE) 
     updateSliderInput(session, "dropout", value = 20)
     updateNumericInput(session, "grpSize", value = 200)
@@ -397,9 +413,8 @@ server <- function(input, output, session) {
   ##### manuItem 2 (Analysis): Reset button #####
   observeEvent(input$reset, {
     updateRadioButtons(session, "splineFunc", selected = "Cubic B-splines")
-    updateNumericInput(session, "df", value = 7)
+    updateNumericInput(session, "df", value = 3)
     updateRadioButtons(session, "weightFunc", selected = "Standard")
-    updateCheckboxInput(session, "preprocess", value = TRUE) 
     updateCheckboxInput(session, "parallel", value = FALSE) 
     updateSliderInput(session, "dropout", value = 20)
     updateNumericInput(session, "grpSize", value = 200)
@@ -426,27 +441,38 @@ server <- function(input, output, session) {
   ##### manuItem 2 (Analysis): Run button #####
   res = eventReactive(input$run, {
     showModal(modalDialog("Please wait...", footer=NULL))
+    
     # call package ClusterLong
+    x = rawDat()[,input$inputX]
+    Y = rawDat()[, input$inputY]
+    id = rawDat()[,input$inputID]
+    weight.func = ifelse(input$weightFunc=="Standard", "standardize","softmax")
+    if (input$splineFunc == "Cubic B-splines") {
+      degree = 3
+    } else if (input$splineFunc == "Quadratic B-splines") {
+      degree = 2
+    } else {
+      degree = as.numeric(input$degree)
+    }
+    df = degree + input$df 
+    
     if (input$parallel) {
       registerDoMC(cores = input$Num.Cores)
-      x = rawDat()[,input$inputX]
-      Y = rawDat()[, input$inputY]
-      id = rawDat()[,input$inputID]
-      functional = ifelse(input$splineFunc=="Cubic B-splines", "bs","ns")
-      preprocess = input$preprocess
-      weight.func = ifelse(input$weightFunc=="Standard", "standardize","softmax")
       dropout = input$dropout
       part.size = input$grpSize
-      res = LongDataCluster(x,Y,id,functional, preprocess, weight.func, parallel = T, dropout,part.size)
+      res = LongDataCluster(x=x,
+                            Y=Y,
+                            id=id, 
+                            weight.func=weight.func, 
+                            parallel = T, dropout = dropout, part.size = part.size, 
+                            df=df, degree = degree)
     } else {
-      res = LongDataCluster(x = rawDat()[,input$inputX],
-                            Y = rawDat()[, input$inputY],
-                            id = rawDat()[,input$inputID],
-                            functional = ifelse(input$splineFunc=="Cubic B-splines", "bs","ns"),
-                            preprocess = input$preprocess,
-                            weight.func = ifelse(input$weightFunc=="Standard", "standardize","softmax"),
-                            parallel = FALSE
-      )
+      res = LongDataCluster(x = x,
+                            Y = Y,
+                            id = id,
+                            weight.func = weight.func,
+                            parallel = FALSE,
+                            df=df, degree = degree)
     }
     removeModal()
     return(res)
@@ -455,21 +481,21 @@ server <- function(input, output, session) {
   
   observeEvent(input$run, {
     output$resTxt <- renderText({
-      paste0("Number of clusters (Gap.b): ", res()$No.Gapb)
+      paste0("Number of clusters by Gap.b: ", res()$No.Gapb)
     })
     output$resTxt1 <- renderText({
-      paste0("Number of clusters (CH index): ", res()$No.CH)
+      paste0("Number of clusters by CH index: ", res()$No.CH)
     })
     output$resTxt2 <- renderText({
       paste0("Suggested by Gap.b: ", res()$No.Gapb)
     })
     output$resTxt3 <- renderText({
-      paste0("(Suggested by CH index: ", res()$No.CH, ")")
+      paste0("Suggested by CH index: ", res()$No.CH)
     })
     
     output$UserSpec <- renderUI(
       numericInput(inputId = "UserNoCl", 
-                   label = "Specify a different number", 
+                   label = "Number of clusters by user:", 
                    min   = 2, 
                    step  = 1,
                    value = res()$No.Gapb,
@@ -536,7 +562,7 @@ server <- function(input, output, session) {
     ####### Diagnosis tab #######
     output$FinalNoCl <- renderUI(
       selectizeInput(inputId = "NumCl", 
-                     label = "How many clusters?", 
+                     label = "Specified by User: ", 
                      choices = seq(2,length(res()$Gap_b)),
                      selected = input$UserNoCl,
                      options = list(
