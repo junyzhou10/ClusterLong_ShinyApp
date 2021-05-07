@@ -1,13 +1,13 @@
-require(shiny)
-require(dplyr)
-require(DT)
-require(shinydashboard)
-require(plotrix)
+library(shiny)
+library(dplyr)
+library(DT)
+library(shinydashboard)
+library(plotrix)
 require(ClusterLong)
-require(doMC)
-require(stats)
-require(shinyhelper)
-require(plotly)
+library(doMC)
+library(stats)
+library(shinyhelper)
+library(plotly)
 
 sidebar <- dashboardSidebar(
   sidebarMenu(
