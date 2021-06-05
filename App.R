@@ -3,6 +3,7 @@ library(dplyr)
 library(DT)
 library(shinydashboard)
 library(plotrix)
+# devtools::install_github("junyzhou10/ClusterLong")
 require(ClusterLong)
 library(doMC)
 library(stats)
@@ -24,7 +25,9 @@ sidebar <- dashboardSidebar(
       <p>id: subject id (id)</p>
       <p>obs: observational times (x)</p>
       <p>y_1,...,y_5: five outcomes (Y)</p>
-      <p>label: correct labels (not required for clustering purpose)</p>"
+      <p>label: correct labels (not required for clustering purpose)</p>
+      <p>factor1: a subject-level continuous covariate that impacts the timely responses</p>
+      <p>factor2: a subject-level binary covariate that impacts the timely responses</p>"
       )
     ),
     
@@ -175,8 +178,8 @@ body <- dashboardBody(
                     ),
                     tags$hr(),
                     helper(
-                      numericInput("df", "Number of interval knots", value = 3, min = 0, step = 1),
-                      colour = "lightblue", type = "inline", content = "The total number of spline basis functions = Number of interval knots + Degree of spline basis + 1"
+                      numericInput("df", "Number of internal knots", value = 3, min = 0, step = 1),
+                      colour = "lightblue", type = "inline", content = "The total number of spline basis functions = Number of internal knots + Degree of spline basis + 1"
                     ),
                     
                     tags$hr(),
@@ -197,7 +200,7 @@ body <- dashboardBody(
                   conditionalPanel(
                     "input.parallel",
                     numericInput("Num.Cores", "Register Cores", min = 2, step = 1, value = 7),
-                    sliderInput("dropout", "Dropout at", min = 10, max = 100, value = 20, step = 1, round = T),
+                    sliderInput("dropout", "Stop at", min = 10, max = 100, value = 20, step = 1, round = T),
                     numericInput("grpSize", "Batch size", min = 50, step = 10, value = 300)
                   ),
                   
@@ -458,13 +461,13 @@ server <- function(input, output, session) {
     
     if (input$parallel) {
       registerDoMC(cores = input$Num.Cores)
-      dropout = input$dropout
+      stop = input$dropout
       part.size = input$grpSize
       res = LongDataCluster(x=x,
                             Y=Y,
                             id=id, 
                             weight.func=weight.func, 
-                            parallel = T, dropout = dropout, part.size = part.size, 
+                            parallel = T, stop = stop, part.size = part.size, 
                             df=df, degree = degree)
     } else {
       res = LongDataCluster(x = x,
