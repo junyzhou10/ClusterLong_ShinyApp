@@ -68,7 +68,7 @@ sidebar <- dashboardSidebar(
                        tags$i(class = 'fa fa-envelope', style = 'color:#999999'), 
                        target = '_blank'), style = "font-size: 80%"), 
               p("App created by Junyi Zhou (2018)", style = "font-size: 80%"),
-              p("Last updated: April 2021", style = "font-size: 65%"),
+              p("Last updated: June 2021", style = "font-size: 65%"),
               align = "left", 
               style = "
               position:absolute;
@@ -251,13 +251,23 @@ body <- dashboardBody(
                          width = 12, collapsible = T,
                          div(style = 'overflow-x: scroll',verbatimTextOutput("resIDs")),
                          uiOutput("downResTraj")
-                     ),
-                     box(title = "Cluster Mean Trajectories", 
-                         status = "primary",
-                         solidHeader = T,
-                         width = 12, collapsible = T,
-                         plotlyOutput("MeanTraj")
                      )
+              )
+            ),
+            fluidRow(
+              box(title = "Plot Arguments",
+                  status = "warning",
+                  solidHeader = T,
+                  width = 4,
+                  collapsible = T,
+                  uiOutput("OutcomeSel")
+              ),
+              box(title = "Cluster Mean Trajectories", 
+                  status = "primary",
+                  solidHeader = T,
+                  width = 8, 
+                  collapsible = T,
+                  plotlyOutput("MeanTraj")
               )
             ),
             fluidRow(
@@ -273,7 +283,7 @@ body <- dashboardBody(
                   solidHeader = T,
                   width = 8,
                   collapsible = T,
-                  plotOutput("FeaturePlot")
+                  plotlyOutput("FeaturePlot")
               )
             )
     )
@@ -352,6 +362,7 @@ server <- function(input, output, session) {
     output$resIDs  <- NULL
     output$MeanTraj<- NULL
     output$FeatureSel  <- NULL
+    output$OutcomeSel  <- NULL
     output$downDendro  <- NULL
     output$downResTraj <- NULL
     output$FeaturePlot <- NULL
@@ -383,8 +394,8 @@ server <- function(input, output, session) {
           id.sel = input$selectID
           subset = dat[dat[,input$inputID] %in% id.sel,]
           subset <- highlight_key(subset, key=~get(input$inputID))
-          p <- ggplot(subset, aes_string(input$inputX, input$selectY, group = input$inputID)) + geom_line(linetype = "dotted", color = "gray50") + geom_point(size = 1, color = "gray50")
-          gg <- highlight(ggplotly(p, tooltip = c(input$inputID)), "plotly_click", 'plotly_doubleclick')
+          p <- ggplot(subset, aes_string(x = input$inputX, y = input$selectY, group = input$inputID)) + geom_line(linetype = "dotted", color = "gray50") + geom_point(size = 1, color = "gray50")
+          gg <- highlight(ggplotly(p, tooltip = c(input$inputID, input$inputX, input$selectY)), on = "plotly_hover", 'plotly_doubleclick')
           return(gg)
         }
         
@@ -399,7 +410,7 @@ server <- function(input, output, session) {
         subset = dat[dat[,input$inputID] %in% id.sel,]
         subset <- highlight_key(subset, key=~get(input$inputID))
         p <- ggplot(subset, aes_string(input$inputX, input$selectY, group = input$inputID)) + geom_line(linetype = "dotted", color = "gray50") + geom_point(size = 1, color = "gray50")
-        gg <- highlight(ggplotly(p, tooltip = c(input$inputID)), "plotly_hover", 'plotly_doubleclick')
+        gg <- highlight(ggplotly(p, tooltip = c(input$inputID, input$inputX, input$selectY)), "plotly_click", 'plotly_doubleclick')
         return(gg)
         
         ## regular plot
@@ -436,6 +447,7 @@ server <- function(input, output, session) {
     output$resIDs  <- NULL
     output$MeanTraj<- NULL
     output$FeatureSel  <- NULL
+    output$OutcomeSel  <- NULL
     output$downDendro  <- NULL
     output$downResTraj <- NULL
     output$FeaturePlot <- NULL
@@ -590,6 +602,23 @@ server <- function(input, output, session) {
       )
     )
     
+    ## plot arguments, used to select how many outcomes to display
+    output$OutcomeSel <- renderUI(
+      tagList(
+        helper(
+          selectizeInput("selectResponse", "Select number of outcomes to display", 
+                         choices = seq(1, length(input$inputY)),
+                         selected = min(6, length(input$inputY))
+          ),
+          
+          colour = "lightblue", type = "inline", content = "<p>Limit the largest number of outcomes to display under multiple outcomes situation. The maximal number of outcomes to display by default is 6.</p>
+            <p>Outcomes with larger weights are selected first.</p>
+            <p>By checking the box, algorithm will select the outcomes with the smallest weights.</p>"
+        ),
+        checkboxInput("RevOrd", "Display least important variables?", value = FALSE)
+      )
+    )
+    
     # yield mean pattern plots
     observeEvent(input$NumCl,{
       
@@ -607,7 +636,7 @@ server <- function(input, output, session) {
       })
       
       output$MeanTraj <- renderPlotly({
-        MeanPlot(res(), No.Cluster = no.cl)
+        MeanPlot(res(), No.Cluster = no.cl, max.plots = as.numeric(input$selectResponse), rev.ord = input$RevOrd)
       })
       
       output$downResTraj <- renderUI(
@@ -622,7 +651,7 @@ server <- function(input, output, session) {
       
     })
     
-    output$FeaturePlot <- renderPlot(
+    output$FeaturePlot <- renderPlotly(
       if (!is.null(input$selectFeature) & input$selectFeature!='' & !is.null(input$NumCl)) {
         sel.dat = rawDat()[,c(input$inputID, input$inputX, input$selectFeature)]; sel.dat = sel.dat[complete.cases(sel.dat), ]
         sel.dat = sel.dat %>% group_by(get(input$inputID)) %>% arrange(get(input$inputX)) %>% filter(row_number()==1) %>% ungroup()
@@ -635,13 +664,20 @@ server <- function(input, output, session) {
         
         if (class(sel.x) == "factor" | length(unique(sel.x)) <= 10) {
           tab = table(sel.x, sel.dat[,"grp"])
-          p_val = ifelse(min(tab)<=5, fisher.test(tab)$p.value, chisq.test(tab)$p.value)
-          barplot(t(t(tab)/colSums(tab)),  border="white", xlab="", ylab = "Percent", main = paste0(input$selectFeature," (p-val: ", round(p_val,3), ")") , legend = TRUE, 
-                  args.legend = list(bty = "n", x = "right", ncol = 1), xlim = c(0,ncol(tab)*1.5) )
+          p_val = round(ifelse(min(tab)<=5, fisher.test(tab)$p.value, chisq.test(tab)$p.value), 4)
+          
+          plot_ly(as.data.frame(t(tab)/colSums(tab)), 
+                  x = ~Var1, y = ~Freq, type = 'bar', 
+                  name = ~sel.x, color = ~sel.x) %>%
+            layout(title = paste("p-val:", p_val), yaxis = list(title = 'Percentage'), barmode = 'stack')
+          # barplot(t(t(tab)/colSums(tab)),  border="white", xlab="", ylab = "Percent", main = paste0(input$selectFeature," (p-val: ", round(p_val,3), ")") , legend = TRUE, 
+          #         args.legend = list(bty = "n", x = "right", ncol = 1), xlim = c(0,ncol(tab)*1.5) )
         } else { # treat as continuous, yield boxplot
-          p_val = summary(aov(sel.x~sel.dat$grp))[[1]][1,"Pr(>F)"]
-          ggplot(sel.dat, aes_string(x="grp", y=input$selectFeature)) + geom_boxplot() + theme_bw() + labs(x = "")+
-            annotate("text",  x=Inf, y = Inf, label = paste("p-val:", round(p_val,3)), vjust=1, hjust=1)
+          p_val = round(summary(aov(sel.x~sel.dat$grp))[[1]][1,"Pr(>F)"], 4)
+          plot_ly(sel.dat, y=as.formula(paste0('~', input$selectFeature)), color=as.formula(paste0('~', "grp")), type = "box") %>% layout(title = paste("p-val:", p_val))
+          
+          # ggplot(sel.dat, aes_string(x="grp", y=input$selectFeature)) + geom_boxplot() + theme_bw() + labs(x = "")+
+          #   annotate("text",  x=Inf, y = Inf, label = paste("p-val:", p_val), vjust=1, hjust=1)
         }
         
       }
