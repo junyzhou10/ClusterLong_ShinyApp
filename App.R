@@ -477,7 +477,13 @@ server <- function(input, output, session) {
     df = degree + input$df 
     
     if (input$parallel) {
-      registerDoMC(cores = input$Num.Cores)
+      if (Sys.info()["sysname"] == "Windows" ){
+        registerDoParallel(cores = input$Num.Cores)
+      } else {
+        registerDoMC(cores = input$Num.Cores)
+      }
+      
+      
       stop = input$dropout
       part.size = input$grpSize
       res = LongDataCluster(x=x,
