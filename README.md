@@ -11,7 +11,7 @@ Run in R:
 shiny::runGitHub("ClusterLong_ShinyApp", "junyzhou10", ref = "main")
 ```
 
-Certain R-packages are required: `shiny`, `dplyr`, `DT`, `shinydashboard`, `doMC`, `plotrix`, `plotly`, `stats`, `shinyhelper`, and `ClusterLong`. So make sure the packages have already been installed beforehand. 
+Certain R-packages are required: `shiny`, `dplyr`, `DT`, `shinydashboard`, `doMC` (or `doParallel` for windows), `plotrix`, `plotly`, `stats`, `shinyhelper`, and `ClusterLong`. So make sure the packages have already been installed beforehand. 
 
 (Notice that package ClusterLong is not from CRAN. For installation, please refer to [ClusterLong](https://github.com/junyzhou10/ClusterLong))
 
