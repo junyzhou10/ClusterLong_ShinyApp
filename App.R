@@ -1,14 +1,19 @@
-library(shiny)
-library(dplyr)
-library(DT)
-library(shinydashboard)
-library(plotrix)
+require(shiny)
+require(dplyr)
+require(DT)
+require(shinydashboard)
+require(plotrix)
 # devtools::install_github("junyzhou10/ClusterLong")
 require(ClusterLong)
-library(doMC)
-library(stats)
-library(shinyhelper)
-library(plotly)
+if (Sys.info()["sysname"] == "Windows" ){
+  require(doParallel)
+} else {
+  require(doMC)
+}
+
+require(stats)
+require(shinyhelper)
+require(plotly)
 
 sidebar <- dashboardSidebar(
   sidebarMenu(
@@ -390,7 +395,7 @@ server <- function(input, output, session) {
     } else {
       dat = rawDat()[complete.cases(rawDat()[, c(input$inputX, input$selectY, input$inputID)]),]
       if (input$SubjSpec) { # plot specific subjects using inputs from selectID
-        if (!is.null(input$selectID)){
+        if (!is.null(input$selectID) & !is.null(input$inputX) & !is.null(input$inputY)){
           id.sel = input$selectID
           subset = dat[dat[,input$inputID] %in% id.sel,]
           subset <- highlight_key(subset, key=~get(input$inputID))
