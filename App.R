@@ -3,8 +3,8 @@ require(dplyr)
 require(DT)
 require(shinydashboard)
 require(plotrix)
-# devtools::install_github("junyzhou10/ClusterLong")
-require(ClusterLong)
+# devtools::install_github("junyzhou10/clusterMLD")
+require(clusterMLD)
 if (Sys.info()["sysname"] == "Windows" ){
   require(doParallel)
 } else {
@@ -59,7 +59,7 @@ sidebar <- dashboardSidebar(
     menuItem("Data Visualization", tabName = "visualization", icon = icon("th")),
     
     # tab: Clustering analysis
-    menuItem("Clustering Analysis", icon = icon("flag-checkered"), tabName = "ClusterLong" #badgeLabel = "GO", badgeColor = "green"
+    menuItem("Clustering Analysis", icon = icon("flag-checkered"), tabName = "clusterMLD" #badgeLabel = "GO", badgeColor = "green"
     ),
     
     # tab: Clustering analysis
@@ -73,7 +73,7 @@ sidebar <- dashboardSidebar(
                        tags$i(class = 'fa fa-envelope', style = 'color:#999999'), 
                        target = '_blank'), style = "font-size: 80%"), 
               p("App created by Junyi Zhou (2018)", style = "font-size: 80%"),
-              p("Last updated: June 2021", style = "font-size: 65%"),
+              p("Last updated: July 2022", style = "font-size: 65%"),
               align = "left", 
               style = "
               position:absolute;
@@ -161,9 +161,9 @@ body <- dashboardBody(
     ),
     
     ###### UI for manuItem 2 (Clustering Analysis) ######
-    tabItem(tabName = "ClusterLong",
+    tabItem(tabName = "clusterMLD",
             h2("Longitudinal Data Clustering"),
-            tags$em("based on R package ClusterLong (https://github.com/junyzhou10/ClusterLong)"),
+            tags$em("based on R package clusterMLD (https://github.com/junyzhou10/clusterMLD)"),
             tags$hr(),
             fluidRow(
               box(title = "Settings",
@@ -189,17 +189,18 @@ body <- dashboardBody(
                     
                     tags$hr(),
                     helper(
-                      radioButtons("weightFunc", "Weighting method:", choices = c("Standard", "Softmax"), selected = "Standard"),
+                      radioButtons("weightFunc", "Weighting method:", choices = c("Standard", "Softmax", "Equal"), selected = "Standard"),
                       colour = "lightblue", type = "inline", content = "<p>For the cases with multiple response outcomes.</p>
-                      <p>Standard method simply takes the average of weights coefficients.</p>
-                      <p>Softmax adopts the softmax transformation of weights coefficients, which is suggested for the cases with large amount of noise outcomes</p>"
+                      <p>'Standard' method simply takes the average of weights coefficients.</p>
+                      <p>'Softmax' adopts the softmax transformation of weights coefficients, which is suggested for the cases with large amount of noise outcomes</p>
+                      <p>'Equal' forces all outcomes to be treated equally, i.e. without weighting.</p>"
                     ),
                     tags$hr(),
                     helper(
                       checkboxInput("parallel", "Parallel computing?", value = FALSE),
                       colour = "lightblue", type = "inline", content = "<p>Parallel computing is highly recommended for datasets with large number of subjects (> 500).
                       Please notice the difference between the number of subjects and the number of observations. </p>
-                      <p>This App will split data into subsets with size roughly as the specificed 'batch size', and implement ClusterLong algorithm in a parallel manner.</p>"
+                      <p>This App will split data into subsets with size roughly as the specificed 'batch size', and implement clusterMLD algorithm in a parallel manner.</p>"
                     )
                   ),
                   conditionalPanel(
@@ -297,7 +298,7 @@ body <- dashboardBody(
 
 # Put them together into a dashboardPage
 ui <- dashboardPage(
-  dashboardHeader(title = span("ClusterLong App",
+  dashboardHeader(title = span("clusterMLD App",
                                style = "color: white; font-size: 22px")),
   sidebar,
   body
@@ -462,11 +463,11 @@ server <- function(input, output, session) {
   res = eventReactive(input$run, {
     showModal(modalDialog("Please wait...", footer=NULL))
     
-    # call package ClusterLong
+    # call package clusterMLD
     x = rawDat()[,input$inputX]
     Y = rawDat()[, input$inputY]
     id = rawDat()[,input$inputID]
-    weight.func = ifelse(input$weightFunc=="Standard", "standardize","softmax")
+    weight.func = ifelse(input$weightFunc=="Standard", "standardize", ifelse(input$weightFunc=="Softmax", "softmax","equal"))
     if (input$splineFunc == "Cubic B-splines") {
       degree = 3
     } else if (input$splineFunc == "Quadratic B-splines") {
